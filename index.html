@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; object-src 'none'; media-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<title>LOTUS ForMe 车机自检</title>
+<meta name="description" content="只在浏览器本地读取并显示车机公开能力信息，不上传检测结果。">
+</head>
+<body style="margin:0">
+<style>
+  :root{
+    --ground:#0e0f0d; --panel:#171a17; --panel2:#1e221d; --line:#2c322b;
+    --ink:#f3f2ec; --muted:#8f9a90; --label:#6f7a70;
+    --acc:#f6d200; --grn:#3fae7f;
+    --warn:#e8a13a; --bad:#e5674f; --good:#3fae7f;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","Consolas","Liberation Mono",monospace;
+    --sans:"SF Pro Display","Segoe UI",system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --ground:#f1f0ea; --panel:#fbfbf7; --panel2:#ffffff; --line:#dcded4;
+      --ink:#181a16; --muted:#5a6459; --label:#7c857a; --grn:#1b6b4c; }
+  }
+  :root[data-theme="dark"]{ --ground:#0e0f0d; --panel:#171a17; --panel2:#1e221d; --line:#2c322b;
+    --ink:#f3f2ec; --muted:#8f9a90; --label:#6f7a70; --grn:#3fae7f; }
+  :root[data-theme="light"]{ --ground:#f1f0ea; --panel:#fbfbf7; --panel2:#ffffff; --line:#dcded4;
+    --ink:#181a16; --muted:#5a6459; --label:#7c857a; --grn:#1b6b4c; }
+
+  *{box-sizing:border-box}
+  .wrap{background:var(--ground);color:var(--ink);font-family:var(--sans);
+    min-height:100vh;padding:clamp(16px,3vw,40px);line-height:1.5}
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    border-bottom:2px solid var(--acc);padding-bottom:14px;margin-bottom:22px}
+  .brand{font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:clamp(15px,2.4vw,20px)}
+  .brand span{color:var(--acc)}
+  .hint{color:var(--muted);font-size:14px;max-width:48ch}
+  h1{font-size:clamp(22px,4vw,34px);margin:0 0 2px;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
+  .part{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--acc);
+    margin:34px 0 14px;font-weight:800;display:flex;align-items:center;gap:10px}
+  .part::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:8px}
+  .vcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;
+    display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden}
+  .vcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--acc)}
+  .vlabel{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--label)}
+  .vval{font-family:var(--mono);font-size:clamp(18px,3vw,25px);font-weight:700;
+    font-variant-numeric:tabular-nums;word-break:break-word}
+  .vsub{font-size:13px;color:var(--muted);font-family:var(--mono)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+  .sect{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 20px 14px}
+  .sect h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--grn);
+    margin:16px 0 10px;font-weight:700}
+  .row{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-top:1px solid var(--line)}
+  .row:first-of-type{border-top:none}
+  .k{color:var(--muted);font-size:14px;flex:0 0 auto}
+  .v{font-family:var(--mono);font-size:14px;text-align:right;font-variant-numeric:tabular-nums;
+    word-break:break-word;max-width:62%}
+  .v.ok{color:var(--good)} .v.no{color:var(--bad)} .v.warn{color:var(--warn)}
+
+  .note{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--warn);
+    border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;color:var(--ink)}
+  .note b{color:var(--warn)}
+
+  .steps{display:grid;gap:12px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px}
+  .step .st-h{display:flex;gap:12px;align-items:flex-start}
+  .step .tag{flex:0 0 auto;font-family:var(--mono);font-weight:700;color:#141414;background:var(--acc);
+    border-radius:8px;padding:3px 9px;font-size:13px;margin-top:2px}
+  .step .title{font-weight:700;font-size:15px}
+  .step .body{color:var(--muted);font-size:14px;margin-top:6px;line-height:1.6}
+  .step .body code{font-family:var(--mono);background:var(--panel2);padding:1px 6px;border-radius:5px;color:var(--ink)}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--grn);cursor:pointer;user-select:none}
+  .chk input{width:17px;height:17px;accent-color:var(--grn)}
+
+  .ua{margin-top:16px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .ua .k{display:block;margin-bottom:8px}
+  .ua pre{margin:0;font-family:var(--mono);font-size:13px;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+  textarea{width:100%;margin-top:12px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:10px;padding:12px;font-family:var(--mono);font-size:13px;min-height:88px;resize:vertical}
+
+  .bar{display:flex;gap:12px;flex-wrap:wrap;margin-top:22px;align-items:center}
+  button{font-family:var(--sans);font-weight:700;font-size:15px;cursor:pointer;
+    border-radius:10px;padding:12px 20px;border:1px solid var(--acc);background:var(--acc);color:#141414}
+  button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+  button:focus-visible{outline:3px solid var(--grn);outline-offset:2px}
+  .toast{color:var(--grn);font-family:var(--mono);font-size:14px;opacity:0;transition:opacity .2s}
+  .toast.on{opacity:1}
+  .foot{color:var(--label);font-size:12px;margin-top:28px;font-family:var(--mono)}
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <div class="brand"><span>◆</span> LOTUS ForMe · 车机自检 <span>CARPROBE</span></div>
+    <div class="hint">在车机浏览器里打开。① 段自动读取硬件/系统线索并标出证据强弱；② 段是开发者模式/ADB 的手动探路清单。检测全部在本机完成，不上传。把结果拍照或点「复制全部」发回对话。</div>
+  </div>
+
+  <h1>硬件与系统读数</h1>
+  <div class="part">① 浏览器自动读数</div>
+  <div class="verdict" id="verdict"></div>
+
+  <div class="grid" style="margin-top:16px">
+    <div class="sect" id="s-graphics"><h2>图形 / 芯片线索</h2></div>
+    <div class="sect" id="s-hardware"><h2>硬件</h2></div>
+    <div class="sect" id="s-display"><h2>显示</h2></div>
+    <div class="sect" id="s-media"><h2>媒体编解码</h2></div>
+    <div class="sect" id="s-net"><h2>网络与环境</h2></div>
+    <div class="sect" id="s-feat"><h2>可连接性 / 改机相关能力</h2></div>
+  </div>
+
+  <div class="ua">
+    <span class="k">完整 User-Agent（最关键，含安卓版本 / 内核 / 常带设备型号）</span>
+    <pre id="ua-raw"></pre>
+  </div>
+
+  <div class="part">② 开发者模式 / ADB 探路（车机系统里手动操作）</div>
+  <div class="note"><b>先看这条：</b>浏览器<b>无法开启也不能确认</b>开发者模式和 ADB——那是系统层设置，在浏览器沙箱之外。下面只是吉利 / ECARX 系车机的<b>候选路径</b>，ForMe 的当前版本未证实。只做只读检查；若入口不存在就停止，不刷机、不输来源不明密码、不安装工程包。</div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="st-h"><span class="tag">A</span><div><div class="title">版本号连点（最常见）</div>
+        <div class="body">车机 <code>设置 → 系统 / 关于本机</code> → 连续点击「版本号 / 系统版本」<b>5~7 次</b> → 弹出「已进入开发者模式」→ 返回找到「开发者选项」→ 打开「USB 调试 / 无线调试(ADB)」。</div></div></div>
+      <label class="chk"><input type="checkbox" data-k="a"> 试过了 / 有效</label>
+    </div>
+    <div class="step">
+      <div class="st-h"><span class="tag">B</span><div><div class="title">时钟连点进工程菜单</div>
+        <div class="body">部分 ECARX 车机：连点屏幕右上角<b>时钟约 10 次</b>进工程菜单 → 找「ADB / USB 模式切换」→ 选「Host mode（主机模式）」。</div></div></div>
+      <label class="chk"><input type="checkbox" data-k="b"> 试过了 / 有效</label>
+    </div>
+    <div class="step">
+      <div class="st-h"><span class="tag">C</span><div><div class="title">无线 ADB（车机最常用，无 USB 口时走这个）</div>
+        <div class="body">开发者选项里打开「无线调试」后：电脑与车机<b>连同一个手机热点</b> → 电脑执行 <code>adb connect 车机IP:5555</code> → 车机弹窗点「允许」。车机 IP 在 <code>设置→网络</code> 里看。</div></div></div>
+      <label class="chk"><input type="checkbox" data-k="c"> 试过了 / 有效</label>
+    </div>
+    <div class="step">
+      <div class="st-h"><span class="tag">D</span><div><div class="title">侧载 App（拿到 ADB 之后）</div>
+        <div class="body">连上后 <code>adb install 应用.apk</code> 装第三方应用；或用「甲壳虫」类工具远程装。<b>注意</b>：HYPER OS 的「安全管家→应用管理」可能拦截未知来源，需先在里面放行。</div></div></div>
+      <label class="chk"><input type="checkbox" data-k="d"> 试过了 / 有效</label>
+    </div>
+  </div>
+
+  <textarea id="notes" placeholder="记录区：哪个方法有效？版本号是多少？有没有『开发者选项』入口？ADB 开关在哪一层？车机浏览器叫什么？——随手记，会自动保存。"></textarea>
+
+  <div class="bar">
+    <button id="copy">复制全部读数+记录</button>
+    <button class="ghost" id="reload">重新检测</button>
+    <span class="toast" id="toast">已复制到剪贴板</span>
+  </div>
+
+  <div class="foot">CARPROBE · 全部数据在本地浏览器读取，不外发 · 勾选与记录保存在本机浏览器 · 完成后把内容发回对话</div>
+</div>
+
+<script>
+(async function(){
+  var out = {};
+  function add(sectId, k, v, cls){
+    var el=document.getElementById(sectId);
+    var r=document.createElement('div'); r.className='row';
+    r.innerHTML='<span class="k"></span><span class="v '+(cls||'')+'"></span>';
+    r.children[0].textContent=k; r.children[1].textContent=(v===undefined||v===null||v==='')?'—':v;
+    el.appendChild(r); out[k]=v;
+  }
+  function vcard(label, val, sub){
+    var el=document.getElementById('verdict');
+    var c=document.createElement('div'); c.className='vcard';
+    c.innerHTML='<div class="vlabel"></div><div class="vval"></div><div class="vsub"></div>';
+    c.children[0].textContent=label; c.children[1].textContent=val||'—'; c.children[2].textContent=sub||'';
+    el.appendChild(c);
+  }
+
+  var ua = navigator.userAgent||'';
+  var platform = navigator.platform||'';
+  document.getElementById('ua-raw').textContent = ua;
+
+  // User-Agent Client Hints can reveal the real architecture even when the legacy UA is frozen/spoofed.
+  var uaCH={};
+  try{
+    if(navigator.userAgentData && navigator.userAgentData.getHighEntropyValues){
+      uaCH=await navigator.userAgentData.getHighEntropyValues([
+        'architecture','bitness','model','platformVersion','fullVersionList','wow64'
+      ]);
+    }
+  }catch(e){ uaCH={error:e.message}; }
+
+  // WebGL renderer
+  var renderer='(不可用)', vendor='(不可用)', gl1=false, gl2=false, maxTex='—';
+  var glVersion='—', glslVersion='—', maxRenderbuffer='—', maxViewport='—', extCount='—';
+  try{
+    var cv=document.createElement('canvas');
+    var gl1ctx=cv.getContext('webgl')||cv.getContext('experimental-webgl'); if(gl1ctx){gl1=true;}
+    var gl=cv.getContext('webgl2'); if(gl){gl2=true;} else {gl=gl1ctx;}
+    if(gl){
+      var dbg=gl.getExtension('WEBGL_debug_renderer_info');
+      if(dbg){ renderer=gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)||renderer;
+               vendor=gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)||vendor; }
+      else { renderer=gl.getParameter(gl.RENDERER)||renderer; vendor=gl.getParameter(gl.VENDOR)||vendor; }
+      maxTex=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      glVersion=gl.getParameter(gl.VERSION)||'—';
+      glslVersion=gl.getParameter(gl.SHADING_LANGUAGE_VERSION)||'—';
+      maxRenderbuffer=gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)||'—';
+      var vp=gl.getParameter(gl.MAX_VIEWPORT_DIMS); maxViewport=vp?(vp[0]+' × '+vp[1]):'—';
+      extCount=(gl.getSupportedExtensions()||[]).length;
+    }
+  }catch(e){ renderer='(读取失败) '+e.message; }
+
+  var chip='未知', chipSub='', socCandidate='未锁定', socReason='仅凭网页不能确认精确SoC';
+  var R=renderer.toLowerCase();
+  if(R.indexOf('adreno')>=0){
+    chip='高通 (Adreno)'; var m=renderer.match(/adreno[^0-9]*([0-9]{3})/i); chipSub=m?('Adreno '+m[1]):'';
+    if(m && m[1]==='640'){
+      socCandidate='SA8155P 级（高概率）';
+      socReason='汽车场景最吻合8155P；也可能是855系，非单凭WebGL定案';
+    }else if(m && m[1]==='695'){
+      socCandidate='SA8295P 级（候选）';
+      socReason='Adreno 695 与8295P平台资料吻合，仍需系统字段确认';
+    }
+  }
+  else if(R.indexOf('mali')>=0){ chip='ARM Mali (联发科/其他)'; var mm=renderer.match(/mali[- ]?([a-z0-9\-]+)/i); chipSub=mm?('Mali '+mm[1]):''; }
+  else if(R.indexOf('nvidia')>=0||R.indexOf('tegra')>=0){ chip='NVIDIA'; chipSub='Tegra/Orin?'; }
+  else if(R.indexOf('powervr')>=0){ chip='Imagination PowerVR'; }
+  else if(R.indexOf('apple')>=0){ chip='Apple'; }
+  else if(renderer.indexOf('(')!==0 && renderer.length>2){ chip='见渲染器原文'; chipSub=renderer.slice(0,28); }
+
+  var os='未知';
+  var am=ua.match(/Android\s+([0-9.]+)/i);
+  if(am){ os='Android '+am[1]; }
+  else if(/iPhone|iPad|iOS/i.test(ua)){ var im=ua.match(/OS\s+([0-9_]+)/); os='iOS '+(im?im[1].replace(/_/g,'.'):''); }
+  else if(/Linux/i.test(ua)||/Linux/i.test(platform)){ os='Linux'+(/aarch64|arm64/i.test(platform)?' (AArch64)':''); }
+  var chr=ua.match(/Chrome\/([0-9.]+)/); var chrome=chr?('Chrome/WebView '+chr[1]):'—';
+  var mz=ua.match(/MZAutoBrowser\/([^\s]+)/i); var autoBrowser=mz?('MZAutoBrowser '+mz[1]):'未识别';
+  var wv=/; wv\)/i.test(ua)?'WebView (App内)':(/Version\/[0-9.]+ Chrome/.test(ua)?'WebView':'独立浏览器');
+  var model='—';
+  var dm=ua.match(/Android[^;]*;\s*([^;)]+?)\s*(Build\/|\))/i);
+  if(dm){ model=dm[1].trim(); }
+
+  var uaArch=/x86_64|x64|amd64/i.test(ua)?'x86_64':(/aarch64|arm64/i.test(ua)?'aarch64':(/arm/i.test(ua)?'arm':'未声明'));
+  var platformArch=/aarch64|arm64/i.test(platform)?'aarch64':(/x86_64|x64|amd64/i.test(platform)?'x86_64':(/arm/i.test(platform)?'arm':'未声明'));
+  var archConflict=(uaArch!=='未声明'&&platformArch!=='未声明'&&uaArch!==platformArch);
+
+  // connectivity verdict (mod-relevant)
+  var conn=[]; if(navigator.usb)conn.push('WebUSB'); if(navigator.serial)conn.push('WebSerial'); if(navigator.bluetooth)conn.push('WebBT');
+  var connStr=conn.length?conn.join(' / '):'无';
+
+  vcard('芯片家族', chip, chipSub||('GPU: '+renderer.slice(0,30)));
+  vcard('座舱 SoC 候选', socCandidate, socReason);
+  vcard('操作系统', os, wv);
+  vcard('浏览器内核', chrome, autoBrowser+' · '+(gl2?'WebGL2 ✓':'WebGL1'));
+  vcard('设备型号(UA)', model, model==='—'?'UA未暴露型号':'');
+  vcard('可连接能力', connStr, conn.length?'浏览器暴露了连接API':'纯网页沙箱');
+
+  add('s-graphics','WebGL 渲染器', renderer);
+  add('s-graphics','WebGL 厂商', vendor);
+  add('s-graphics','WebGL 1 支持', gl1?'是':'否', gl1?'ok':'no');
+  add('s-graphics','WebGL 2 支持', gl2?'是':'否', gl2?'ok':'no');
+  add('s-graphics','GL 版本', glVersion);
+  add('s-graphics','GLSL 版本', glslVersion);
+  add('s-graphics','最大纹理尺寸', maxTex);
+  add('s-graphics','最大渲染缓冲区', maxRenderbuffer);
+  add('s-graphics','最大视口', maxViewport);
+  add('s-graphics','扩展数量', extCount);
+
+  add('s-hardware','CPU 逻辑核数', navigator.hardwareConcurrency||'未暴露');
+  add('s-hardware','设备内存(约)', navigator.deviceMemory?navigator.deviceMemory+' GB':'未暴露');
+  add('s-hardware','触控点数', navigator.maxTouchPoints);
+  add('s-hardware','navigator.platform', platform||'—');
+  add('s-hardware','平台推断架构', platformArch);
+  add('s-hardware','UA 声称架构', uaArch, archConflict?'warn':'');
+  add('s-hardware','架构字段冲突', archConflict?'是（优先信平台/Client Hints）':'否', archConflict?'warn':'ok');
+  add('s-hardware','Client Hints 架构', uaCH.architecture||'未暴露');
+  add('s-hardware','Client Hints 位数', uaCH.bitness||'未暴露');
+  add('s-hardware','Client Hints 型号', uaCH.model||'未暴露');
+  add('s-hardware','系统平台版本', uaCH.platformVersion||'未暴露');
+  add('s-hardware','定制浏览器', autoBrowser);
+
+  add('s-display','屏幕分辨率', screen.width+' × '+screen.height);
+  add('s-display','可用区域', screen.availWidth+' × '+screen.availHeight);
+  add('s-display','视口', window.innerWidth+' × '+window.innerHeight);
+  add('s-display','像素比 DPR', window.devicePixelRatio);
+  add('s-display','色深', screen.colorDepth+'-bit');
+
+  function canPlay(t){ try{var v=document.createElement('video'); return v.canPlayType(t)||'no';}catch(e){return 'no';} }
+  function tag(r){ return (r==='probably'||r==='maybe')?'ok':(r==='no'||r===''?'no':'warn'); }
+  var h264=canPlay('video/mp4; codecs="avc1.42E01E"');
+  var hevc=canPlay('video/mp4; codecs="hev1.1.6.L93.B0"');
+  var vp9 =canPlay('video/webm; codecs="vp9"');
+  var av1 =canPlay('video/mp4; codecs="av01.0.05M.08"');
+  add('s-media','H.264', h264||'no', tag(h264));
+  add('s-media','HEVC/H.265', hevc||'no', tag(hevc));
+  add('s-media','VP9', vp9||'no', tag(vp9));
+  add('s-media','AV1', av1||'no', tag(av1));
+
+  var c=navigator.connection||{};
+  add('s-net','网络类型', c.effectiveType||'未暴露');
+  add('s-net','下行估算', c.downlink?c.downlink+' Mbps':'—');
+  add('s-net','语言', navigator.language+' ['+(navigator.languages||[]).join(', ')+']');
+  try{ add('s-net','时区', Intl.DateTimeFormat().resolvedOptions().timeZone); }catch(e){}
+  add('s-net','在线', navigator.onLine?'是':'否', navigator.onLine?'ok':'no');
+
+  // mod-relevant capability probes
+  add('s-feat','WebUSB (可连USB设备)', navigator.usb?'支持':'无', navigator.usb?'warn':'');
+  add('s-feat','WebSerial (可连串口)', navigator.serial?'支持':'无', navigator.serial?'warn':'');
+  add('s-feat','WebBluetooth', navigator.bluetooth?'支持':'无', navigator.bluetooth?'warn':'');
+  add('s-feat','WebADB 可行(需WebUSB)', navigator.usb?'理论可行':'不可行', navigator.usb?'warn':'no');
+  add('s-feat','安装为应用(PWA)', (window.BeforeInstallPromptEvent||('onbeforeinstallprompt' in window))?'可能':'否');
+  add('s-feat','文件系统访问', window.showOpenFilePicker?'支持':'无', window.showOpenFilePicker?'warn':'');
+  add('s-feat','Service Worker', ('serviceWorker' in navigator)?'支持':'无');
+
+  // persist checklist + notes
+  try{
+    var saved=JSON.parse(localStorage.getItem('carprobe')||'{}');
+    document.querySelectorAll('.chk input').forEach(function(cb){
+      if(saved['chk_'+cb.dataset.k]) cb.checked=true;
+      cb.addEventListener('change',function(){ saved['chk_'+cb.dataset.k]=cb.checked; localStorage.setItem('carprobe',JSON.stringify(saved)); });
+    });
+    var nt=document.getElementById('notes');
+    if(saved.notes) nt.value=saved.notes;
+    nt.addEventListener('input',function(){ saved.notes=nt.value; localStorage.setItem('carprobe',JSON.stringify(saved)); });
+  }catch(e){}
+
+  document.getElementById('copy').addEventListener('click',function(){
+    var checks=[]; document.querySelectorAll('.chk input').forEach(function(cb){ checks.push('方法'+cb.dataset.k.toUpperCase()+': '+(cb.checked?'有效✓':'—')); });
+    var lines=['=== LOTUS ForMe 车机自检 CARPROBE ===',
+      '芯片家族: '+chip+(chipSub?' ('+chipSub+')':''),
+      '座舱SoC候选: '+socCandidate+' — '+socReason,
+      '操作系统: '+os+' / '+wv, '浏览器内核: '+chrome,
+      '定制浏览器: '+autoBrowser,
+      '设备型号(UA): '+model, '平台: '+platform,
+      '架构字段: platform='+platformArch+' / UA='+uaArch+(archConflict?' [冲突]':''),
+      'UA Client Hints: '+JSON.stringify(uaCH),
+      '可连接能力: '+connStr,
+      'WebGL渲染器: '+renderer, 'WebGL厂商: '+vendor,''];
+    for(var k in out){ lines.push(k+': '+out[k]); }
+    lines.push('','--- 开发者模式探路 ---'); lines.push.apply(lines,checks);
+    lines.push('记录: '+(document.getElementById('notes').value||'(空)'));
+    lines.push('','User-Agent:', ua);
+    var txt=lines.join('\n');
+    function done(){var t=document.getElementById('toast');t.classList.add('on');setTimeout(function(){t.classList.remove('on')},1800);}
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done,fallback);}
+    else fallback();
+    function fallback(){var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){}document.body.removeChild(ta);}
+  });
+  document.getElementById('reload').addEventListener('click',function(){location.reload();});
+})();
+</script>
+
+</body>
+</html>
